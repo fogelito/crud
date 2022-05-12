@@ -5,14 +5,32 @@
     "license": "MIT",
     "authors": [
         {
-            "name": "kodumbeats",
-            "email": "brandon.leckemby@gmail.com"
+            "name": "appwrite",
+            "email": "support@appwrite.io"
         }
     ],
     "minimum-stability": "dev",
     "require": {
+        "php": ">=8.0.0",
+        "ext-curl": "*",
+        "ext-imagick": "*",
+        "ext-mbstring": "*",
+        "ext-json": "*",
+        "ext-yaml": "*",
+        "ext-dom": "*",
+        "ext-redis": "*",
+        "ext-swoole": "*",
+        "ext-pdo": "*",
+        "ext-openssl": "*",
+        "ext-zlib": "*",
+        "ext-sockets": "*",
+        "utopia-php/framework": "0.19.*",
+        "utopia-php/cache": "0.6.*",
+        "utopia-php/config": "0.2.*",
+        "utopia-php/registry": "0.5.*",
         "utopia-php/swoole": "dev-master",
-        "utopia-php/cli": "dev-master"
+        "utopia-php/cli": "dev-master",
+        "utopia-php/database": "0.15.*"
     },
     "require-dev": {
         "swoole/ide-helper": "4.6.7"

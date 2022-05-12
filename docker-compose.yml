@@ -7,3 +7,26 @@ services:
       - 8080:8080
     volumes:
       - ./app:/app/app
+      - ./vendor/utopia-php/database:/app/vendor/utopia-php/database
+    networks:
+      - appwrite
+
+  mariadb:
+    image: mariadb:10.7
+    container_name: crude-mariadb
+    networks:
+      - appwrite
+    volumes:
+      - appwrite-mariadb:/var/lib/mysql:rw
+    ports:
+      - "8702:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_DATABASE=mydb
+      - MYSQL_USER=user
+      - MYSQL_PASSWORD=password
+
+volumes:
+  appwrite-mariadb:
+networks:
+  appwrite:
