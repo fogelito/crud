@@ -4,13 +4,17 @@ if (file_exists(__DIR__.'/../vendor/autoload.php')) {
     require __DIR__.'/../vendor/autoload.php';
 }
 
+
 use Utopia\App;
 use Utopia\Cache\Adapter\None;
-use Utopia\Cache\Adapter\Redis as RedisCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Query;
+use Utopia\Database\Validator\Key;
 use Utopia\Registry\Registry;
+use Utopia\Response as ResponseAlias;
 use Utopia\Swoole\Request;
 use Utopia\Swoole\Response;
 use Utopia\Swoole\Files;
@@ -18,6 +22,11 @@ use Utopia\CLI\Console;
 use Swoole\Http\Server;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
+use Utopia\Validator;
+use Utopia\Validator\ArrayList;
+use Utopia\Validator\Boolean;
+use Utopia\Validator\Numeric;
+use Utopia\Validator\Text;
 
 $http = new Server("0.0.0.0", 8080);
 
@@ -54,12 +63,18 @@ App::shutdown(function($request) {
 }, ['request'], 'api');
 
 
-App::error(function(Exception $error) {
+App::error(function(Exception $error, Response $response) {
 
-    var_dump($error->getCode());
-    var_dump($error->getLine());
-    var_dump($error->getMessage());
-}, ['error'], 'api');
+    $response->json(
+        [
+            'code' => $error->getCode(),
+            'getLine' => $error->getLine() ,
+            'getFile' => $error->getFile(),
+            'getMessage' => $error->getMessage()
+        ]);
+
+}, ['error', 'response'], 'api');
+
 
 /*
     The routes are defined before the Swoole server is turned on.
@@ -79,16 +94,32 @@ App::get('/')
     );
 
 
-App::get('/create-collection')
+App::get('/init')
     ->groups(['api'])
     ->inject('request')
     ->inject('response')
     ->inject('db')
     ->action(
         function($request, $response, Database $db) {
+            if(!$db->exists($db->getDefaultDatabase())){
+                $db->create($db->getDefaultDatabase());
+            }
+            $response->json([$db->getDefaultDatabase() . ' created']);
+        }
+    );
+
+
+App::get('/create-collection')
+    ->groups(['api'])
+    ->inject('request')
+    ->inject('response')
+    ->inject('db')
+    ->action(
+        function($request,Response $response, Database $db) {
             $collection = $db->getCollection('tasks');
 
             if($collection->isEmpty()){
+                $db->createCollection('tasks');
                 $db->createAttribute('tasks', 'title', Database::VAR_STRING, 1000000, true);
                 $db->createAttribute('tasks', 'time', Database::VAR_INTEGER, 0, true);
                 $db->createAttribute('tasks', 'is_active', Database::VAR_BOOLEAN, 0, true);
@@ -97,10 +128,105 @@ App::get('/create-collection')
             }
 
              $response->json([$collection]);
+        }
+    );
+
+
+App::get('/tasks/add')
+    ->groups(['api'])
+    ->param('title', '', new Text(128), 'title', false)
+    ->param('string_list', '', new ArrayList(new Text(128)), 'string_list', false)
+    ->inject('request')
+    ->inject('response')
+    ->inject('db')
+    ->action(
+        function($title, array $stringList, Request $request, Response $response, Database $db) {
+            $collection = $db->getCollection('tasks');
+
+            if($collection->isEmpty()){
+                throw new Exception('not found', ResponseAlias::STATUS_CODE_NOT_FOUND);
+            }
+
+            $doc = $db->createDocument('tasks', new Document([
+                '$read' => ['role:all'],
+                '$write' => ['role:all'],
+                'title' => $title,
+                'time' => time(),
+                'is_active' => true,
+                'string_list' => $stringList,
+            ]));
+
+            $response->json([$doc, $stringList]);
 
         }
     );
 
+
+App::get('/tasks/update')
+    ->groups(['api'])
+    ->param('id', null, new Key(), 'id to update', false)
+    ->param('title', null, new Text(128), 'title', false)
+    ->param('string_list', null, new ArrayList(new Text(128)), 'string_list', false)
+    ->param('is_active', null, new Boolean(true), 'is_active', false)
+    ->inject('request')
+    ->inject('response')
+    ->inject('db')
+    ->action(
+        function($id, $title, array $stringList, $isActive, Request $request, Response $response, Database $db) {
+            $isActive = $isActive === "true";
+            $collection = $db->getCollection('tasks');
+
+            if($collection->isEmpty()){
+                throw new Exception('not found', ResponseAlias::STATUS_CODE_NOT_FOUND);
+            }
+
+            $doc = $db->updateDocument('tasks', $id, new Document([
+                '$id' => $id,
+                '$collection' => 'tasks',
+                '$read' => ['role:all'],
+                '$write' => ['role:all'],
+                'title' => $title,
+                'time' => time(),
+                'is_active' => $isActive,
+                'string_list' => $stringList,
+            ]));
+
+            $response->json([$doc]);
+        }
+    );
+
+
+
+App::get('/tasks/delete')
+    ->groups(['api'])
+    ->param('id', null, new Key(), 'id to update', false)
+    ->inject('request')
+    ->inject('response')
+    ->inject('db')
+    ->action(
+        function($id, Request $request, Response $response, Database $db) {
+            $res = $db->deleteDocument('tasks', $id);
+            $response->json([$res]);
+        }
+    );
+
+
+App::get('/tasks/list')
+    ->groups(['api'])
+    ->inject('request')
+    ->inject('response')
+    ->inject('db')
+    ->action(
+        function(Request $request, Response $response, Database $db) {
+
+            $documents = $db->find('tasks', [
+                new Query('is_active', Query::TYPE_EQUAL, [false]),
+            ]);
+
+            $response->json([$documents]);
+
+        }
+    );
 
 App::get('/hello')
     ->groups(['api'])
@@ -143,13 +269,12 @@ $registry->set('db', function () { // This is usually for our workers or CLI com
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     ));
 
-    $dbScheme = 'shimo';
-
     $cache = new Cache(new None());
+
+    $dbScheme = 'shimo';
     $database = new Database(new MariaDB($pdo), $cache);
-    $database->setNamespace('ns');
-    $database->exists($dbScheme) || $database->create($dbScheme);
     $database->setDefaultDatabase($dbScheme);
+    $database->setNamespace('ns');
 
     return $database;
 
@@ -177,6 +302,7 @@ $http->on('request', function (SwooleRequest $swooleRequest, SwooleResponse $swo
         Console::error('There\'s a problem with '.$request->getURI());
         $swooleResponse->end('500: Server Error');
     }
+
 });
 
 $http->start();
