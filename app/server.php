@@ -132,6 +132,24 @@ App::get('/create-collection')
     );
 
 
+App::get('/doc/:id')
+    ->groups(['api'])
+    ->param('id', '', new Text(128), 'title', false)
+    ->inject('request')
+    ->inject('response')
+    ->inject('db')
+    ->action(
+        function($id, Request $request, Response $response, Database $db) {
+            $doc = $db->getDocument('tasks', $id);
+            if($doc->isEmpty()){
+                throw new Exception('Not found', ResponseAlias::STATUS_CODE_NOT_FOUND);
+            }
+            $response->json([$doc]);
+        }
+    );
+
+
+
 App::get('/tasks/add')
     ->groups(['api'])
     ->param('title', '', new Text(128), 'title', false)
@@ -267,6 +285,8 @@ $registry->set('db', function () { // This is usually for our workers or CLI com
         PDO::ATTR_PERSISTENT => true,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_EMULATE_PREPARES => true,
+        PDO::ATTR_STRINGIFY_FETCHES => true
     ));
 
     $cache = new Cache(new None());
