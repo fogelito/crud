@@ -148,7 +148,7 @@ App::get('/tasks/add')
             }
 
             $doc = $db->createDocument('tasks', new Document([
-                '$read' => ['role:all'],
+                '$read' => ['role:all', 'yosi', 'ben:123'],
                 '$write' => ['role:all'],
                 'title' => $title,
                 'time' => time(),
