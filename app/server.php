@@ -140,11 +140,15 @@ App::get('/doc/:id')
     ->inject('db')
     ->action(
         function($id, Request $request, Response $response, Database $db) {
-            $doc = $db->getDocument('tasks', $id);
-            if($doc->isEmpty()){
+
+           // $collection = $db->createCollection('tasks');
+
+            $document = $db->getDocument('tasks', $id);
+            if($document->isEmpty()){
                 throw new Exception('Not found', ResponseAlias::STATUS_CODE_NOT_FOUND);
             }
-            $response->json([$doc]);
+
+            $response->json([$document]);
         }
     );
 
